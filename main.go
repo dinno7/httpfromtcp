@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	line := []byte{}
 	for {
 		buf := make([]byte, 8)
 		n, err := messagesFile.Read(buf)
@@ -24,6 +26,16 @@ func main() {
 			log.Fatalln(err)
 			return
 		}
-		fmt.Printf("read: %s\n", string(buf[:n]))
+		readBytes := buf[:n]
+		if bytes.Contains(readBytes, []byte("\n")) {
+			splitted := bytes.Split(readBytes, []byte("\n"))
+			line = append(line, splitted[0]...)
+			fmt.Printf("read: %s\n", string(line))
+
+			line = splitted[1]
+		} else {
+			line = append(line, readBytes...)
+		}
+
 	}
 }
