@@ -6,15 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"sync"
 )
-
-var bytePool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 8)
-		return &b
-	},
-}
 
 func main() {
 	messagesFile, err := os.Open("./messages.txt")
@@ -22,9 +14,9 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	buf := bytePool.Get().(*[]byte)
 	for {
-		n, err := messagesFile.Read(*buf)
+		buf := make([]byte, 8)
+		n, err := messagesFile.Read(buf)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -32,8 +24,6 @@ func main() {
 			log.Fatalln(err)
 			return
 		}
-		fmt.Printf("read: %s\n", string((*buf)[:n]))
+		fmt.Printf("read: %s\n", string(buf[:n]))
 	}
-
-	bytePool.Put(buf)
 }
