@@ -27,12 +27,12 @@ func main() {
 			return
 		}
 		readBytes := buf[:n]
-		if bytes.Contains(readBytes, []byte("\n")) {
-			splitted := bytes.Split(readBytes, []byte("\n"))
-			line = append(line, splitted[0]...)
+		newLineIndex := bytes.Index(readBytes, []byte("\n"))
+		if newLineIndex != -1 {
+			line = append(line, readBytes[:newLineIndex]...)
 			fmt.Printf("read: %s\n", string(line))
 
-			line = splitted[1]
+			line = readBytes[newLineIndex+1:]
 		} else {
 			line = append(line, readBytes...)
 		}
