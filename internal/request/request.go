@@ -7,6 +7,8 @@ import (
 	"io"
 	"slices"
 	"strings"
+
+	"github.com/dinno7/httpfromtcp/internal/headers"
 )
 
 const (
@@ -34,19 +36,22 @@ type RequestLine struct {
 type parserState string
 
 const (
-	stateParserInit  parserState = "initialized"
-	stateParserError parserState = "error"
-	stateParserDone  parserState = "done"
+	stateParserInit    parserState = "initialized"
+	stateParserError   parserState = "error"
+	stateParserDone    parserState = "done"
+	stateParserHeaders parserState = "headers"
 )
 
 type Request struct {
-	RequestLine
-	state parserState
+	RequestLine RequestLine
+	state       parserState
+	Headers     headers.Headers
 }
 
 func newRequest() *Request {
 	return &Request{
-		state: stateParserInit,
+		state:   stateParserInit,
+		Headers: headers.NewHeaders(),
 	}
 }
 
@@ -54,11 +59,26 @@ func (r *Request) done() bool {
 	return r.state == stateParserDone || r.state == stateParserError
 }
 
+func (r *Request) String() string {
+	var b strings.Builder
+	fmt.Fprintf(
+		&b,
+		"%s %s HTTP/%s\r\n",
+		r.RequestLine.Method,
+		r.RequestLine.RequestTarget,
+		r.RequestLine.HttpVersion,
+	)
+	for key, value := range r.Headers {
+		fmt.Fprintf(&b, "%s: %s\r\n", key, value)
+	}
+	b.WriteString("\r\n")
+	return b.String()
+}
+
 func RequestFromReader(r io.Reader) (*Request, error) {
 	req := newRequest()
 	buf := make([]byte, 1024)
 	readBytesLen := 0
-	parsedBytesLen := 0
 	for !req.done() {
 		n, err := r.Read(buf[readBytesLen:])
 		// TODO: What to do this this?
@@ -67,14 +87,12 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		}
 		readBytesLen += n
 
-		parsedN, err := req.parse(buf[:readBytesLen+n])
+		parsedN, err := req.parse(buf[:readBytesLen])
 		if err != nil {
 			return nil, err
 		}
 		copy(buf, buf[parsedN:readBytesLen])
 		readBytesLen -= parsedN
-		parsedBytesLen += parsedN
-
 	}
 
 	return req, nil
@@ -85,9 +103,10 @@ func (r *Request) parse(data []byte) (int, error) {
 	read := 0
 outer:
 	for {
+		currentDate := data[read:]
 		switch r.state {
 		case stateParserInit:
-			rl, n, err := parseRequestLine(data)
+			rl, n, err := parseRequestLine(currentDate)
 			if err != nil {
 				r.state = stateParserError
 				return 0, err
@@ -100,10 +119,28 @@ outer:
 
 			r.RequestLine = *rl
 			read += n
-			r.state = stateParserDone
+			r.state = stateParserHeaders
 
+		case stateParserHeaders:
+			n, done, err := r.Headers.Parse(currentDate)
+			if err != nil {
+				r.state = stateParserError
+				return 0, err
+			}
+
+			if n == 0 {
+				break outer
+			}
+
+			read += n
+
+			if done {
+				r.state = stateParserDone
+			}
 		case stateParserDone:
 			break outer
+		default:
+			panic("invalid request state!")
 
 		}
 	}
