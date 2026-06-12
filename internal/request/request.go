@@ -11,7 +11,7 @@ import (
 
 const (
 	VALID_HTTP_VERSION = "1.1"
-	SEPARATOR          = "\r\n"
+	CRLF               = "\r\n"
 )
 
 var HTTP_METHODS = []string{
@@ -31,28 +31,90 @@ type RequestLine struct {
 	Method        string
 }
 
+type parserState string
+
+const (
+	stateParserInit  parserState = "initialized"
+	stateParserError parserState = "error"
+	stateParserDone  parserState = "done"
+)
+
 type Request struct {
 	RequestLine
+	state parserState
+}
+
+func newRequest() *Request {
+	return &Request{
+		state: stateParserInit,
+	}
+}
+
+func (r *Request) done() bool {
+	return r.state == stateParserDone || r.state == stateParserError
 }
 
 func RequestFromReader(r io.Reader) (*Request, error) {
-	rawReq, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read raw request: %w", err)
+	req := newRequest()
+	buf := make([]byte, 1024)
+	readBytesLen := 0
+	parsedBytesLen := 0
+	for !req.done() {
+		n, err := r.Read(buf[readBytesLen:])
+		// TODO: What to do this this?
+		if err != nil {
+			return nil, fmt.Errorf("unable to read raw request: %w", err)
+		}
+		readBytesLen += n
+
+		parsedN, err := req.parse(buf[:readBytesLen+n])
+		if err != nil {
+			return nil, err
+		}
+		copy(buf, buf[parsedN:readBytesLen])
+		readBytesLen -= parsedN
+		parsedBytesLen += parsedN
+
 	}
 
-	requestLine, _, err := parseRequestLine(rawReq)
-	if err != nil {
-		return nil, errors.Join(errors.New("faild parse request line"), err)
-	}
+	return req, nil
+}
 
-	return &Request{
-		RequestLine: *requestLine,
-	}, nil
+// data -> all currently unparsed bytes from the buffer
+func (r *Request) parse(data []byte) (int, error) {
+	read := 0
+outer:
+	for {
+		switch r.state {
+		case stateParserInit:
+			rl, n, err := parseRequestLine(data)
+			if err != nil {
+				r.state = stateParserError
+				return 0, err
+			}
+
+			// NOTE: Need to read more data, so go to parent loop to read more data
+			if n == 0 {
+				break outer
+			}
+
+			r.RequestLine = *rl
+			read += n
+			r.state = stateParserDone
+
+		case stateParserDone:
+			break outer
+
+		}
+	}
+	return read, nil
 }
 
 func parseRequestLine(rawRequest []byte) (*RequestLine, int, error) {
-	separatorIndex := bytes.Index(rawRequest, []byte(SEPARATOR))
+	separatorIndex := bytes.Index(rawRequest, []byte(CRLF))
+	if separatorIndex == -1 {
+		return nil, 0, nil
+	}
 	firstLine := rawRequest[:separatorIndex]
 
 	line := bytes.SplitN(firstLine, []byte{' '}, 3)
@@ -70,7 +132,7 @@ func parseRequestLine(rawRequest []byte) (*RequestLine, int, error) {
 		return nil, 0, err
 	}
 
-	return parsedRequestLine, len(firstLine) + len(SEPARATOR), nil
+	return parsedRequestLine, separatorIndex + len(CRLF), nil
 }
 
 func (rl *RequestLine) validate() error {
