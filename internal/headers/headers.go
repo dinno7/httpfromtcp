@@ -55,7 +55,11 @@ func (h Headers) Get(key string) string {
 
 func (h Headers) Set(key, value string) {
 	key = strings.ToLower(key)
-	h[key] = value
+	if _, ok := h[key]; ok {
+		h[key] = h[key] + ", " + value
+	} else {
+		h[key] = value
+	}
 }
 
 func parseHeaderLine(data []byte) (string, string, error) {

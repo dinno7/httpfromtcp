@@ -34,4 +34,16 @@ func TestHeaders(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidCharacter)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
+
+	// Test: Multiple header value with single key
+
+	headers = NewHeaders()
+	data = []byte(
+		"Set-Person: lane-loves-go\r\nSet-Person: prime-loves-zig\r\nSet-Person: tj-loves-ocaml\r\n\r\n",
+	)
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	assert.Equal(t, 86, n)
+	assert.True(t, done)
+	assert.Equal(t, headers.Get("Set-Person"), "lane-loves-go, prime-loves-zig, tj-loves-ocaml")
 }
