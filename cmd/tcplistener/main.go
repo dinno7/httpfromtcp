@@ -1,12 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
+
+	"github.com/dinno7/httpfromtcp/internal/request"
 )
 
 func main() {
@@ -21,45 +20,13 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Println("New connection accepted")
-		for line := range getLineChannel(conn) {
-			fmt.Printf("read: %s\n", line)
-		}
-	}
-}
-
-func getLineChannel(f io.ReadCloser) <-chan string {
-	lineChan := make(chan string)
-	go func() {
-		defer f.Close()
-		defer close(lineChan)
-
-		line := []byte{}
-		for {
-			buf := make([]byte, 8)
-			n, err := f.Read(buf)
+		go func() {
+			fmt.Println("New connection accepted")
+			req, err := request.RequestFromReader(conn)
 			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					log.Println(err)
-				}
-
-				// NOTE: Send to channel remain last line
-				if len(line) > 0 {
-					lineChan <- string(line)
-				}
-				break
+				fmt.Printf("error in parsing request: %s", err)
 			}
-			readBytes := buf[:n]
-			newLineIndex := bytes.Index(readBytes, []byte("\n"))
-			if newLineIndex != -1 {
-				line = append(line, readBytes[:newLineIndex]...)
-				lineChan <- string(line) // NOTE: Send to whole line
-				line = readBytes[newLineIndex+1:]
-			} else {
-				line = append(line, readBytes...)
-			}
-		}
-	}()
-
-	return lineChan
+			fmt.Println(req.String())
+		}()
+	}
 }
