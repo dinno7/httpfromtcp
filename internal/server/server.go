@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -24,9 +23,12 @@ func Serve(port int, handler Handler) (*Server, error) {
 		return nil, err
 	}
 
+	isClosed := new(atomic.Bool)
+	isClosed.Store(false)
+
 	server := &Server{
 		listener:  listener,
-		isClosed:  new(atomic.Bool),
+		isClosed:  isClosed,
 		handlerFn: handler,
 	}
 	go server.listen()
@@ -34,6 +36,7 @@ func Serve(port int, handler Handler) (*Server, error) {
 }
 
 func (s *Server) Close() error {
+	s.isClosed.Store(true)
 	return s.listener.Close()
 }
 
@@ -54,6 +57,9 @@ func (s *Server) listen() {
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
 
+	responseBodyBuf := new(bytes.Buffer)
+	responseWriter := response.NewResponse(responseBodyBuf)
+
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
 		fmt.Printf("error in parsing request: %s", err)
@@ -61,28 +67,22 @@ func (s *Server) handle(conn net.Conn) {
 			StatusCode: response.StatusCodeBadRequest,
 			Message:    []byte(err.Error()),
 		}
-		_ = errors.Join(hErr.Write(conn), conn.Close())
+		_ = hErr.Write(responseWriter)
+		if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
+			fmt.Println("Something went wrong", err)
+		}
 		return
 	}
 
-	responseBodyBuf := new(bytes.Buffer)
-	if err := s.handlerFn(responseBodyBuf, req); err != nil {
-		_ = errors.Join(err.Write(conn), conn.Close())
+	if err := s.handlerFn(responseWriter, req); err != nil {
+		_ = err.Write(responseWriter)
+		if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
+			fmt.Println("Something went wrong", err)
+		}
 		return
 	}
 
-	contentLength := responseBodyBuf.Len()
-
-	statusLineWriteErr := response.WriteStatusLine(conn, response.StatusCodeOk)
-	headers := response.GetDefaultHeaders(contentLength)
-	headerWriteErr := response.WriteHeaders(conn, headers)
-
-	if contentLength > 0 {
-		conn.Write(responseBodyBuf.Bytes())
-	}
-	closeErr := conn.Close()
-
-	if err := errors.Join(statusLineWriteErr, headerWriteErr, closeErr); err != nil {
+	if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
 		fmt.Println("Something went wrong", err)
 	}
 }

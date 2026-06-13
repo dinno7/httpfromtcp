@@ -2,20 +2,20 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/dinno7/httpfromtcp/internal/request"
+	"github.com/dinno7/httpfromtcp/internal/response"
 	"github.com/dinno7/httpfromtcp/internal/server"
 )
 
 const port = 42069
 
 func main() {
-	server, err := server.Serve(port, func(w io.Writer, req *request.Request) *server.HandlerError {
+	handler := func(w *response.Response, req *request.Request) *server.HandlerError {
 		switch req.RequestLine.Method {
 		case "GET":
 			switch req.RequestLine.RequestTarget {
@@ -33,10 +33,16 @@ func main() {
 		}
 
 		return nil
-	})
+	}
+
+	server, err := server.Serve(
+		port,
+		handler,
+	)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
+
 	defer server.Close()
 	log.Println("Server started on port", port)
 
