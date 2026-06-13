@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/dinno7/httpfromtcp/internal/headers"
@@ -21,10 +22,12 @@ var HTTP_METHODS = []string{
 }
 
 var (
-	ErrUnsupportedHttpVersion = errors.New("http version not support")
-	ErrInvalidRequestHeader   = errors.New("invalid request header")
-	ErrInvalidHttpMethod      = errors.New("invalid http method")
-	ErrInvalidTargetPath      = errors.New("invalid target path")
+	ErrUnsupportedHttpVersion  = errors.New("http version not support")
+	ErrInvalidRequestHeader    = errors.New("invalid request header")
+	ErrInvalidHttpMethod       = errors.New("invalid http method")
+	ErrInvalidTargetPath       = errors.New("invalid target path")
+	ErrFailedReadContentLength = errors.New("failed to read content length from header")
+	ErrBodyExceedContentLength = errors.New("body exceed content length")
 )
 
 type RequestLine struct {
@@ -40,18 +43,21 @@ const (
 	stateParserError   parserState = "error"
 	stateParserDone    parserState = "done"
 	stateParserHeaders parserState = "headers"
+	stateParserBody    parserState = "body"
 )
 
 type Request struct {
-	RequestLine RequestLine
 	state       parserState
+	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 }
 
 func newRequest() *Request {
 	return &Request{
 		state:   stateParserInit,
 		Headers: headers.NewHeaders(),
+		Body:    make([]byte, 0),
 	}
 }
 
@@ -72,6 +78,7 @@ func (r *Request) String() string {
 		fmt.Fprintf(&b, "%s: %s\r\n", key, value)
 	}
 	b.WriteString("\r\n")
+	b.WriteString(string(r.Body))
 	return b.String()
 }
 
@@ -83,7 +90,7 @@ func RequestFromReader(r io.Reader) (*Request, error) {
 		n, err := r.Read(buf[readBytesLen:])
 		// TODO: What to do this this?
 		if err != nil {
-			return nil, fmt.Errorf("unable to read raw request: %w", err)
+			return nil, err
 		}
 		readBytesLen += n
 
@@ -135,10 +142,41 @@ outer:
 			read += n
 
 			if done {
+				r.state = stateParserBody
+			}
+		case stateParserBody:
+			contentLengthStr := r.Headers.Get("Content-Length")
+			if contentLengthStr == "" {
+				r.state = stateParserDone
+				break outer
+			}
+
+			contentLength, err := strconv.Atoi(contentLengthStr)
+			if err != nil {
+				return 0, ErrFailedReadContentLength
+			}
+
+			r.Body = append(r.Body, currentDate...)
+
+			currentBodyLen := len(r.Body)
+			currentDataLen := len(currentDate)
+			if currentBodyLen > contentLength {
+				return 0, ErrBodyExceedContentLength
+			}
+
+			read += currentDataLen
+
+			if currentBodyLen == contentLength {
 				r.state = stateParserDone
 			}
+
+			if currentDataLen == 0 {
+				break outer
+			}
+
 		case stateParserDone:
 			break outer
+
 		default:
 			panic("invalid request state!")
 
