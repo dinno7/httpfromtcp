@@ -40,7 +40,7 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 			return 0, false, err
 		}
 
-		h.Set(key, value)
+		h.Append(key, value)
 
 		read += index + len(CRLF)
 	}
@@ -53,13 +53,34 @@ func (h Headers) Get(key string) string {
 	return h[key]
 }
 
-func (h Headers) Set(key, value string) {
+func (h Headers) Append(key, value string) {
 	key = strings.ToLower(key)
 	if _, ok := h[key]; ok {
 		h[key] = h[key] + ", " + value
 	} else {
 		h[key] = value
 	}
+}
+
+func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
+}
+
+func (h Headers) Keys() []string {
+	keys := []string{}
+	for key := range h {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (h Headers) Values() []string {
+	values := []string{}
+	for key := range h {
+		values = append(values, h[key])
+	}
+	return values
 }
 
 func (h Headers) ForEach(cb func(key, value string)) {
