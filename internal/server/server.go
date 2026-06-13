@@ -1,11 +1,13 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
 
 	"github.com/dinno7/httpfromtcp/internal/request"
+	"github.com/dinno7/httpfromtcp/internal/response"
 )
 
 type Server struct {
@@ -50,12 +52,12 @@ func (s *Server) handle(conn net.Conn) {
 		fmt.Printf("error in parsing request: %s", err)
 	}
 
-	if _, err := conn.Write(
-		[]byte(
-			"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!",
-		),
-	); err != nil {
-		fmt.Printf("error sending response: %s", err)
+	statusLineWriteErr := response.WriteStatusLine(conn, response.StatusCodeOk)
+	headers := response.GetDefaultHeaders(0)
+	headerWriteErr := response.WriteHeaders(conn, headers)
+	closeErr := conn.Close()
+
+	if err := errors.Join(statusLineWriteErr, headerWriteErr, closeErr); err != nil {
+		fmt.Println("Something went wrong", err)
 	}
-	conn.Close()
 }
