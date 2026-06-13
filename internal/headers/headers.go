@@ -62,6 +62,12 @@ func (h Headers) Set(key, value string) {
 	}
 }
 
+func (h Headers) ForEach(cb func(key, value string)) {
+	for headerKey, headerValue := range h {
+		cb(headerKey, headerValue)
+	}
+}
+
 func parseHeaderLine(data []byte) (string, string, error) {
 	parts := bytes.SplitN(data, []byte{':'}, 2)
 	if len(parts) != 2 {
