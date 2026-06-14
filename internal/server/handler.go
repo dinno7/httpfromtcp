@@ -14,12 +14,9 @@ type HandlerError struct {
 	Message    []byte
 }
 
-func (he *HandlerError) Write(r *response.Response) error {
-	if err := r.WriteStatusLine(he.StatusCode); err != nil {
-		return err
-	}
-	_, err := r.Write(he.Message)
-	return err
+func (he *HandlerError) Write(r *response.Response) (int, error) {
+	r.SetStatusCode(he.StatusCode)
+	return r.Write(he.Message)
 }
 
 func NewHandlerError(code response.StatusCode, message []byte) *HandlerError {
