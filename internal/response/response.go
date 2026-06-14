@@ -120,6 +120,14 @@ func (r *Response) WriteChunkedBodyDone() (int, error) {
 	return r.writer.Write([]byte(sizeStr + CRLF + CRLF))
 }
 
+func (r *Response) WriteTrailers(h headers.Headers) (int, error) {
+	headerStr, err := h.RawString()
+	if err != nil {
+		return 0, err
+	}
+	return r.writer.Write([]byte(headerStr))
+}
+
 func (r *Response) writeStatusLine() (int, error) {
 	if r.statusCode == 0 {
 		r.statusCode = StatusCodeOk
