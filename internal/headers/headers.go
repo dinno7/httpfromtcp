@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -46,6 +47,23 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 	}
 
 	return read, done, nil
+}
+
+func (h Headers) RawString() (string, error) {
+	headersBuf := new(bytes.Buffer)
+
+	for key, value := range h {
+		_, err := fmt.Fprintf(headersBuf, "%s: %s%s", key, value, CRLF)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if _, err := headersBuf.WriteString(CRLF); err != nil {
+		return "", err
+	}
+
+	return headersBuf.String(), nil
 }
 
 func (h Headers) Get(key string) string {
