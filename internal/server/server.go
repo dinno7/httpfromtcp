@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
@@ -56,9 +55,7 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-
-	responseBodyBuf := new(bytes.Buffer)
-	responseWriter := response.NewResponse(responseBodyBuf)
+	responseWriter := response.NewResponse(conn)
 
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
@@ -67,22 +64,12 @@ func (s *Server) handle(conn net.Conn) {
 			StatusCode: response.StatusCodeBadRequest,
 			Message:    []byte(err.Error()),
 		}
-		_ = hErr.Write(responseWriter)
-		if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
-			fmt.Println("Something went wrong", err)
-		}
+		_, _ = hErr.Write(responseWriter)
 		return
 	}
 
-	if err := s.handlerFn(responseWriter, req); err != nil {
-		_ = err.Write(responseWriter)
-		if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
-			fmt.Println("Something went wrong", err)
-		}
-		return
-	}
-
-	if _, err := conn.Write(responseBodyBuf.Bytes()); err != nil {
-		fmt.Println("Something went wrong", err)
+	handlerErr := s.handlerFn(responseWriter, req)
+	if handlerErr != nil {
+		_, _ = handlerErr.Write(responseWriter)
 	}
 }
