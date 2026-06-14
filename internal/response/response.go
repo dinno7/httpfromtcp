@@ -1,7 +1,6 @@
 package response
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -16,13 +15,13 @@ const CRLF = "\r\n"
 
 var ErrInvalidState = errors.New("invalid state of response")
 
-type StatusCode uint
+type StatusCode uint16
 
 const (
-	StatusCodeOk                  = 200
-	StatusCodeBadRequest          = 400
-	StatusCodeNotFound            = 404
-	StatusCodeInternalServerError = 500
+	StatusCodeOk                  StatusCode = 200
+	StatusCodeBadRequest          StatusCode = 400
+	StatusCodeNotFound            StatusCode = 404
+	StatusCodeInternalServerError StatusCode = 500
 )
 
 var statusReasons = map[StatusCode]string{
@@ -50,9 +49,10 @@ type Response struct {
 
 func NewResponse(writer io.Writer) *Response {
 	return &Response{
-		writer:  writer,
-		headers: headers.NewHeaders(),
-		state:   responseStateStatusLine,
+		writer:     writer,
+		headers:    headers.NewHeaders(),
+		state:      responseStateStatusLine,
+		statusCode: StatusCodeOk,
 	}
 }
 
@@ -167,7 +167,7 @@ func (r *Response) writeHeaders() (int, error) {
 func (r *Response) setDefaultHeaders() {
 	defaultHeaders := map[string]string{
 		"Connection":    "close",
-		"Date":          time.Now().Format("Mon, 02 Jan 2006 15:04:05 GTM"),
+		"Date":          time.Now().UTC().Format(time.RFC1123),
 		"Cache-Control": "no-cache",
 	}
 
