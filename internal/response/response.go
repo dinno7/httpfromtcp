@@ -121,11 +121,11 @@ func (r *Response) WriteChunkedBodyDone() (int, error) {
 }
 
 func (r *Response) WriteTrailers(h headers.Headers) (int, error) {
-	headerStr, err := h.RawString()
+	headerBytes, err := h.RawBytes()
 	if err != nil {
 		return 0, err
 	}
-	return r.writer.Write([]byte(headerStr))
+	return r.writer.Write(headerBytes)
 }
 
 func (r *Response) writeStatusLine() (int, error) {
@@ -140,28 +140,13 @@ func (r *Response) writeStatusLine() (int, error) {
 func (r *Response) writeHeaders() (int, error) {
 	r.setDefaultHeaders()
 
-	var headerErr error
-	headersBuf := new(bytes.Buffer)
-
-	// NOTE: Writing headers content
-	r.headers.ForEach(func(key string, value string) {
-		_, err := fmt.Fprintf(headersBuf, "%s: %s%s", key, value, CRLF)
-		if err != nil {
-			headerErr = err
-			return
-		}
-	})
-
-	if _, err := headersBuf.WriteString(CRLF); err != nil {
-		headerErr = err
-	}
-
-	if headerErr != nil {
-		return 0, headerErr
+	headerBytes, err := r.headers.RawBytes()
+	if err != nil {
+		return 0, err
 	}
 
 	r.state = responseStateBody
-	return r.writer.Write(headersBuf.Bytes())
+	return r.writer.Write(headerBytes)
 }
 
 func (r *Response) setDefaultHeaders() {
